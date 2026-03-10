@@ -47,7 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://inknova.vercel.app"
+  "https://ink-nova-crm.vercel.app"
 ];
 
 app.use(
