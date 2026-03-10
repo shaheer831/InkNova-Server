@@ -38,10 +38,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ── App init ──────────────────────────────────────
 const app = express();
 
-
+// ── Security & utility middleware ─────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://inknova.vercel.app"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 
 // Then static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
