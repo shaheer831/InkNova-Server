@@ -38,24 +38,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ── App init ──────────────────────────────────────
 const app = express();
 
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true,
-}));
-
-app.options("*", (req,res)=>{
-  res.sendStatus(200);
-});
-
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
-
 // ── Security & utility middleware ─────────────────
-// app.use(helmet({
-//   crossOriginResourcePolicy: { policy: "cross-origin" },
-// }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// Explicitly handle preflight for all routes
+app.options("*", cors());
 
 // Then static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
