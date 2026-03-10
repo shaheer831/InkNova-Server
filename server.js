@@ -40,13 +40,15 @@ const app = express();
 
 // ── Security & utility middleware ─────────────────
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 app.options("*", cors());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-// Then static files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Static file serving — only useful in development (Vercel has no persistent disk)
+if (process.env.NODE_ENV !== "production") {
+  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+}
 
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("combined", {
@@ -75,11 +77,8 @@ app.use(`${API}/discounts`, discountRoutes);
 app.use(`${API}/roles`, roleRoutes);
 app.use(`${API}/activity`, activityRoutes);
 app.use(`${API}/dashboard`, dashboardRoutes);
-// ── Website (customer-facing) API ─────────────────────────
 app.use(`${API}/website`, websiteRoutes);
-// ── Admin Notifications ────────────────────────────────────
 app.use(`${API}/notifications`, notificationRoutes);
-// ── Admin Reviews ──────────────────────────────────────────
 app.use(`${API}/reviews`, reviewRoutes);
 
 // ── 404 handler ───────────────────────────────────

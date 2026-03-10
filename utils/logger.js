@@ -1,7 +1,8 @@
 /**
  * utils/logger.js
  * Winston logger setup for structured application logging.
- * Logs to console in dev, file in production.
+ * Logs to console always; file transports only in development
+ * (Vercel's filesystem is read-only in production).
  */
 import winston from "winston";
 import path from "path";
@@ -27,6 +28,7 @@ const logger = winston.createLogger({
   ],
 });
 
+// In development only: write logs to files (production filesystem is read-only on Vercel)
 if (process.env.NODE_ENV !== "production") {
   const logsDir = path.join(__dirname, "../logs");
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });

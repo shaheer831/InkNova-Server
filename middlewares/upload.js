@@ -6,9 +6,12 @@
  *   - pdfFile       : 1 PDF (max 50 MB)
  *   - coverImage    : 1 image (max 5 MB)
  *   - showcaseImages: up to 5 images (max 5 MB each)
+ *   - picture       : 1 image for user avatar (max 5 MB)
  *
- * Files are stored in /uploads/<type>/ on disk.
- * In production swap diskStorage for a cloud storage engine (S3, Cloudinary, etc.)
+ * In development: files are saved to /uploads/<type>/ on disk.
+ * In production (Vercel): memoryStorage is used (filesystem is read-only).
+ *   → files are available as req.file.buffer / req.files[field][n].buffer
+ *   → wire up a cloud upload (Cloudinary, S3) in your controllers to persist them.
  */
 import multer from "multer";
 import path from "path";
@@ -17,14 +20,17 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_ROOT = path.join(__dirname, "../uploads");
+const isProduction = process.env.NODE_ENV === "production";
 
-// Ensure upload directories exist
-["pdf", "covers", "showcase", "avatars"].forEach((dir) => {
-  fs.mkdirSync(path.join(UPLOAD_ROOT, dir), { recursive: true });
-});
+// ── Only create local directories in development ──────────────────────────────
+if (!isProduction) {
+  ["pdf", "covers", "showcase", "avatars"].forEach((dir) => {
+    fs.mkdirSync(path.join(UPLOAD_ROOT, dir), { recursive: true });
+  });
+}
 
-/* ── Determine sub-folder by fieldname ──────────── */
-const storage = multer.diskStorage({
+// ── Storage engine ────────────────────────────────────────────────────────────
+const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dirs = {
       pdfFile: "pdf",
@@ -41,14 +47,15 @@ const storage = multer.diskStorage({
   },
 });
 
-/* ── File type filter ───────────────────────────── */
+const storage = isProduction ? multer.memoryStorage() : diskStorage;
+
+// ── File type filter ──────────────────────────────────────────────────────────
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === "pdfFile") {
     if (file.mimetype !== "application/pdf") {
       return cb(new Error("Only PDF files are allowed for pdfFile"), false);
     }
   } else {
-    // coverImage, showcaseImages, picture — all must be images
     const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!allowed.includes(file.mimetype)) {
       return cb(new Error("Only JPEG, PNG or WebP images are allowed"), false);
@@ -57,7 +64,7 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-/* ── Multer instance ────────────────────────────── */
+// ── Multer instance ───────────────────────────────────────────────────────────
 const upload = multer({
   storage,
   fileFilter,
@@ -86,6 +93,11 @@ export const image = upload.single("picture");
 
 /**
  * Helper: convert uploaded files to the schema shape.
+ *
+ * In development (diskStorage): builds URL paths from filenames.
+ * In production (memoryStorage): returns buffer references — controllers
+ *   should upload these buffers to a cloud provider and replace the URLs.
+ *
  * @param {object} files - req.files from multer
  * @returns {object} partial book update object
  */
@@ -95,7 +107,9 @@ export const parseUploadedFiles = (files = {}) => {
   if (files.pdfFile?.[0]) {
     const f = files.pdfFile[0];
     result.pdfFile = {
-      url: `/uploads/pdf/${f.filename}`,
+      url: f.filename ? `/uploads/pdf/${f.filename}` : null,
+      buffer: f.buffer || null,
+      mimetype: f.mimetype,
       originalName: f.originalname,
       size: f.size,
     };
@@ -104,14 +118,18 @@ export const parseUploadedFiles = (files = {}) => {
   if (files.coverImage?.[0]) {
     const f = files.coverImage[0];
     result.coverImage = {
-      url: `/uploads/covers/${f.filename}`,
+      url: f.filename ? `/uploads/covers/${f.filename}` : null,
+      buffer: f.buffer || null,
+      mimetype: f.mimetype,
       originalName: f.originalname,
     };
   }
 
   if (files.showcaseImages?.length) {
     result.showcaseImages = files.showcaseImages.map((f) => ({
-      url: `/uploads/showcase/${f.filename}`,
+      url: f.filename ? `/uploads/showcase/${f.filename}` : null,
+      buffer: f.buffer || null,
+      mimetype: f.mimetype,
       originalName: f.originalname,
     }));
   }
@@ -127,7 +145,9 @@ export const parseUploadedFiles = (files = {}) => {
 export const parseUploadedAvatar = (file) => {
   if (!file) return null;
   return {
-    url: `/uploads/avatars/${file.filename}`,
+    url: file.filename ? `/uploads/avatars/${file.filename}` : null,
+    buffer: file.buffer || null,
+    mimetype: file.mimetype,
     originalName: file.originalname,
     size: file.size,
   };
