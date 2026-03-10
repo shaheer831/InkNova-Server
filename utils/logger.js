@@ -27,8 +27,7 @@ const logger = winston.createLogger({
   ],
 });
 
-// In production, also write to files
-if (process.env.NODE_ENV === "production") {
+if (process.env.NODE_ENV !== "production") {
   const logsDir = path.join(__dirname, "../logs");
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
