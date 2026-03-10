@@ -38,37 +38,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ── App init ──────────────────────────────────────
 const app = express();
 
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true,
+}));
+
+app.options("*", (req,res)=>{
+  res.sendStatus(200);
+});
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
 // ── Security & utility middleware ─────────────────
 // app.use(helmet({
 //   crossOriginResourcePolicy: { policy: "cross-origin" },
 // }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:3000",
-  "https://ink-nova-crm.vercel.app",
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(null, false); // ❗ DO NOT throw error
-    },
-    credentials: true,
-  })
-);
-
-app.options("*", cors());
 
 // Then static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
