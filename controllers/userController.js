@@ -9,6 +9,7 @@
  *  - toggleUserStatus blocks deactivating superadmin
  *  - listUsers filter by roleId (ObjectId) not role string
  *  - effective permissions returned in login/get responses
+ *  - avatar uploads go to Cloudinary in production
  */
 import bcrypt from "bcrypt";
 import { User, ActivityLog, Role } from "../models/index.js";
@@ -18,13 +19,38 @@ import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
 import { validatePermissions } from "../config/permissions.js";
 import { isSuperAdmin } from "../middlewares/auth.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
+const isProduction = process.env.NODE_ENV === "production";
 
 const isOwnerOrSuperAdmin = (req, paramId) =>
   isSuperAdmin(req.user) ||
   req.user._id.toString() === paramId.toString() ||
   req.user.hasPermission("view-users");
+
+/**
+ * Build picture object from uploaded file.
+ * In production: uploads buffer to Cloudinary and returns the CDN url.
+ * In development: returns local disk path.
+ */
+const buildPictureData = async (file) => {
+  if (!file) return null;
+
+  if (isProduction) {
+    const { url, publicId } = await uploadToCloudinary(file.buffer, {
+      folder: "inknova/avatars",
+      mimetype: file.mimetype,
+    });
+    return { url, publicId, originalName: file.originalname, size: file.size };
+  }
+
+  return {
+    url: `/uploads/avatars/${file.filename}`,
+    originalName: file.originalname,
+    size: file.size,
+  };
+};
 
 /* ── Create user ──────────────────────────────────── */
 export const createUser = async (req, res) => {
@@ -58,12 +84,7 @@ export const createUser = async (req, res) => {
     if (pwError) return sendError(res, 400, pwError);
 
     const passwordHash = await bcrypt.hash(password, SALT);
-
-    const picture = {
-      url: `/uploads/avatars/${req.file.filename}`,
-      originalName: req.file.originalname,
-      size: req.file.size,
-    };
+    const picture = await buildPictureData(req.file);
 
     const user = await User.create({
       name,
@@ -119,11 +140,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   });
 
   if (req.file) {
-    updates.picture = {
-      url: `/uploads/avatars/${req.file.filename}`,
-      originalName: req.file.originalname,
-      size: req.file.size,
-    };
+    updates.picture = await buildPictureData(req.file);
   }
 
   Object.assign(user, updates);
@@ -159,7 +176,6 @@ export const bulkDeleteUsers = asyncHandler(async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || !ids.length) return sendError(res, 400, "ids array required");
 
-  // Prevent superadmin deletion
   const superAdminUser = await User.findOne({
     _id: { $in: ids },
     email: process.env.SUPER_ADMIN_EMAIL?.toLowerCase(),
@@ -178,7 +194,6 @@ export const listUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip, sortBy, order } = parsePagination(req.query);
   const { roleId, isActive, search, dateFrom, dateTo } = req.query;
 
-  // Filter by roleId (ObjectId) — not a string role anymore
   const eqFilter = fieldFilter({ roleId, isActive }, ["roleId", "isActive"]);
   const searchFilter = keywordFilter(search, ["name", "email"]);
   const dateFilter = dateRangeFilter(dateFrom, dateTo);
@@ -199,7 +214,6 @@ export const listUsers = asyncHandler(async (req, res) => {
     populate: [{ path: "roleId", select: "name permissions" }],
   });
 
-  // Append effectivePermissions to each user safely
   const enriched = data.map((u) => {
     const obj = u.toObject ? u.toObject() : { ...u };
     const rolePerms = obj.roleId?.permissions || [];

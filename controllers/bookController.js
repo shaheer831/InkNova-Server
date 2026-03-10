@@ -6,6 +6,9 @@
  *   pdfFile        – 1 PDF  (required on create)
  *   coverImage     – 1 image (required on create)
  *   showcaseImages – 3 to 5 images
+ *
+ * In production: buffers are uploaded to Cloudinary via uploadToCloudinary().
+ * In development: local disk paths are used directly via parseUploadedFiles().
  */
 import { Book } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
@@ -13,13 +16,58 @@ import { asyncHandler, logActivity, slugify } from "../utils/helpers.js";
 import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
 import { parseUploadedFiles } from "../middlewares/upload.js";
+import { uploadToCloudinary } from "../utils/cloudinary.js";
+
+const isProduction = process.env.NODE_ENV === "production";
+
+/**
+ * Upload all book files from req.files to Cloudinary (production only).
+ * Returns a fileData object in the same shape as parseUploadedFiles().
+ */
+const uploadBookFilesToCloud = async (files = {}) => {
+  const result = {};
+
+  if (files.pdfFile?.[0]) {
+    const f = files.pdfFile[0];
+    const { url, publicId } = await uploadToCloudinary(f.buffer, {
+      folder: "inknova/books/pdf",
+      mimetype: f.mimetype,
+    });
+    result.pdfFile = { url, publicId, originalName: f.originalname, size: f.size };
+  }
+
+  if (files.coverImage?.[0]) {
+    const f = files.coverImage[0];
+    const { url, publicId } = await uploadToCloudinary(f.buffer, {
+      folder: "inknova/books/covers",
+      mimetype: f.mimetype,
+    });
+    result.coverImage = { url, publicId, originalName: f.originalname };
+  }
+
+  if (files.showcaseImages?.length) {
+    result.showcaseImages = await Promise.all(
+      files.showcaseImages.map(async (f) => {
+        const { url, publicId } = await uploadToCloudinary(f.buffer, {
+          folder: "inknova/books/showcase",
+          mimetype: f.mimetype,
+        });
+        return { url, publicId, originalName: f.originalname };
+      })
+    );
+  }
+
+  return result;
+};
 
 /* ── Create book ──────────────────────────────── */
 export const createBook = asyncHandler(async (req, res) => {
   const { title, description, price, status, categories, tags, pagesCount } = req.body;
   if (!title) return sendError(res, 400, "Title is required");
 
-  const fileData = parseUploadedFiles(req.files || {});
+  const fileData = isProduction
+    ? await uploadBookFilesToCloud(req.files || {})
+    : parseUploadedFiles(req.files || {});
 
   // Validate showcase count when provided
   if (fileData.showcaseImages?.length > 0 && fileData.showcaseImages.length < 3) {
@@ -56,7 +104,9 @@ export const updateBook = asyncHandler(async (req, res) => {
   const book = await Book.findById(req.params.id);
   if (!book) return sendError(res, 404, "Book not found");
 
-  const fileData = parseUploadedFiles(req.files || {});
+  const fileData = isProduction
+    ? await uploadBookFilesToCloud(req.files || {})
+    : parseUploadedFiles(req.files || {});
 
   if (fileData.showcaseImages?.length > 0 && fileData.showcaseImages.length < 3) {
     return sendError(res, 400, "Upload at least 3 showcase images (max 5)");
