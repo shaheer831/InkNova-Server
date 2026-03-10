@@ -40,7 +40,7 @@ r.get("/admin", authenticate, authorize("notifications:read"), async (req, res) 
   } catch (e) { sendError(res, 500, e.message); }
 });
 
-// POST /api/notifications/broadcast — send to all or specific user
+// POST /api/notifications/broadcast — send to all customers or specific user
 r.post("/broadcast", authenticate, authorize("notifications:create"), async (req, res) => {
   try {
     const { type = "system", title, body, targetAll = true, userId } = req.body;
@@ -48,7 +48,8 @@ r.post("/broadcast", authenticate, authorize("notifications:create"), async (req
 
     let userIds = [];
     if (targetAll) {
-      userIds = await User.find({ isActive: true }).distinct("_id");
+      // Only send to customers (roleId === null), never to CRM staff
+      userIds = await User.find({ isActive: true, roleId: null }).distinct("_id");
     } else if (userId) {
       userIds = [userId];
     }
@@ -56,7 +57,7 @@ r.post("/broadcast", authenticate, authorize("notifications:create"), async (req
     const docs = userIds.map(uid => ({ userId: uid, type, title, body }));
     await Notification.insertMany(docs);
 
-    sendSuccess(res, 201, `Notification sent to ${docs.length} users`, { sent: docs.length });
+    sendSuccess(res, 201, `Notification sent to ${docs.length} customer${docs.length !== 1 ? "s" : ""}`, { sent: docs.length });
   } catch (e) { sendError(res, 500, e.message); }
 });
 

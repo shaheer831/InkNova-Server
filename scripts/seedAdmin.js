@@ -7,7 +7,8 @@
  * SuperAdmin is identified by SUPER_ADMIN_EMAIL in .env.
  * This user can NEVER be deleted or deactivated via the API.
  */
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import { User, Role } from "../models/index.js";
