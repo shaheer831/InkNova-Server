@@ -39,32 +39,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 // ── Security & utility middleware ─────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-}));
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-  process.env.FRONTEND_URL, // add your Vercel frontend URL here
-].filter(Boolean);
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
-
-app.options("*", cors(corsOptions));
+app.use(cors());
+app.options("*", cors());
 
 // Then static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
