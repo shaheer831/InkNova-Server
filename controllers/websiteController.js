@@ -96,14 +96,8 @@ export const register = async (req, res) => {
     if (!name || !email || !password) return sendError(res, 400, "Name, email and password required");
     if (await User.findOne({ email: email.toLowerCase() })) return sendError(res, 409, "Email already registered");
 
-    // Find or create the customer role
-    let customerRole = await Role.findOne({ name: /^Customer$/i });
-    if (!customerRole) {
-      customerRole = await Role.create({ name: "Customer", permissions: [] });
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email: email.toLowerCase(), passwordHash, roleId: customerRole._id, permissions: [], phone });
+    const user = await User.create({ name, email: email.toLowerCase(), passwordHash, roleId: "69b1cd95cdba71509c78be05", permissions: [], phone });
 
     const accessToken = signAccess(user._id);
     const refreshToken = signRefresh(user._id);
