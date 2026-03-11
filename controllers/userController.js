@@ -2,22 +2,15 @@
  * controllers/userController.js
  * User management endpoints (admin-facing and profile routes).
  *
- * Changes:
- *  - role field removed; only roleId (ObjectId) is used
- *  - assignRole now takes roleId only (no string role field)
- *  - deleteUser and bulkDeleteUsers block deletion of the superadmin
- *  - toggleUserStatus blocks deactivating superadmin
- *  - listUsers filter by roleId (ObjectId) not role string
- *  - effective permissions returned in login/get responses
- *  - avatar uploads go to Cloudinary in production
+ * Users are treated as customers — no roleId, no permissions assignment.
+ * Role/permission management is handled separately for staff/admin accounts.
  */
 import bcrypt from "bcrypt";
-import { User, ActivityLog, Role } from "../models/index.js";
+import { User, ActivityLog } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { asyncHandler, logActivity, validatePassword } from "../utils/helpers.js";
 import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
-import { validatePermissions } from "../config/permissions.js";
 import { isSuperAdmin } from "../middlewares/auth.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 
@@ -52,10 +45,10 @@ const buildPictureData = async (file) => {
   };
 };
 
-/* ── Create user ──────────────────────────────────── */
+/* ── Create user (customer) ───────────────────────── */
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password, roleId, permissions } = req.body;
+    const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       return sendError(res, 400, "Name, email and password required");
@@ -68,18 +61,6 @@ export const createUser = async (req, res) => {
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return sendError(res, 409, "Email already in use");
 
-    // Validate roleId if provided
-    if (roleId) {
-      const roleExists = await Role.findById(roleId);
-      if (!roleExists) return sendError(res, 400, "Invalid roleId — role not found");
-    }
-
-    // Validate direct permissions if provided
-    if (permissions?.length) {
-      const invalid = validatePermissions(permissions);
-      if (invalid.length) return sendError(res, 400, `Invalid permissions: ${invalid.join(", ")}`);
-    }
-
     const pwError = validatePassword(password);
     if (pwError) return sendError(res, 400, pwError);
 
@@ -90,21 +71,14 @@ export const createUser = async (req, res) => {
       name,
       email: email.toLowerCase(),
       passwordHash,
-      roleId: roleId || null,
-      permissions: permissions || [],
       picture,
     });
 
-    const populated = await user.populate("roleId", "name permissions");
-
     return sendSuccess(res, 201, "User created", {
-      _id: populated._id,
-      name: populated.name,
-      email: populated.email,
-      roleId: populated.roleId,
-      permissions: populated.permissions,
-      effectivePermissions: populated.getEffectivePermissions(),
-      picture: populated.picture,
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      picture: user.picture,
     });
   } catch (error) {
     return sendError(res, 500, error.message);
@@ -118,14 +92,11 @@ export const getUserById = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findById(req.params.id)
-    .select("-passwordHash -refreshToken")
-    .populate("roleId", "name permissions");
+    .select("-passwordHash -refreshToken");
 
   if (!user) return sendError(res, 404, "User not found");
 
-  const userObj = user.toObject();
-  userObj.effectivePermissions = user.getEffectivePermissions();
-  return sendSuccess(res, 200, "User retrieved", userObj);
+  return sendSuccess(res, 200, "User retrieved", user.toObject());
 });
 
 /* ── Update user profile ──────────────────────────── */
@@ -151,8 +122,6 @@ export const updateUser = asyncHandler(async (req, res) => {
     _id: user._id,
     name: user.name,
     email: user.email,
-    roleId: user.roleId,
-    permissions: user.permissions,
     picture: user.picture,
   });
 });
@@ -192,9 +161,9 @@ export const bulkDeleteUsers = asyncHandler(async (req, res) => {
 /* ── List users ───────────────────────────────────── */
 export const listUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip, sortBy, order } = parsePagination(req.query);
-  const { roleId, isActive, search, dateFrom, dateTo } = req.query;
+  const { isActive, search, dateFrom, dateTo } = req.query;
 
-  const eqFilter = fieldFilter({ roleId, isActive }, ["roleId", "isActive"]);
+  const eqFilter = fieldFilter({ isActive }, ["isActive"]);
   const searchFilter = keywordFilter(search, ["name", "email"]);
   const dateFilter = dateRangeFilter(dateFrom, dateTo);
 
@@ -211,25 +180,15 @@ export const listUsers = asyncHandler(async (req, res) => {
     sortBy,
     order,
     select: "-passwordHash -refreshToken",
-    populate: [{ path: "roleId", select: "name permissions" }],
   });
 
-  const enriched = data.map((u) => {
-    const obj = u.toObject ? u.toObject() : { ...u };
-    const rolePerms = obj.roleId?.permissions || [];
-    const directPerms = obj.permissions || [];
-    obj.effectivePermissions = [...new Set([...rolePerms, ...directPerms])];
-    return obj;
-  });
-
-  return sendSuccess(res, 200, "Users retrieved", enriched, meta);
+  return sendSuccess(res, 200, "Users retrieved", data, meta);
 });
 
 /* ── List all users (no pagination — for dropdowns) ── */
 export const listUsersAll = asyncHandler(async (req, res) => {
   const users = await User.find()
-    .select("_id name email isActive roleId")
-    .populate("roleId", "name")
+    .select("_id name email isActive")
     .sort({ name: 1 });
   return sendSuccess(res, 200, "All users retrieved", users);
 });
@@ -273,71 +232,6 @@ export const toggleUserStatus = asyncHandler(async (req, res) => {
 
   await logActivity(req.user._id, user.isActive ? "ACTIVATE" : "DEACTIVATE", "User", user._id);
   return sendSuccess(res, 200, `User ${user.isActive ? "activated" : "deactivated"}`);
-});
-
-/* ── Assign direct permissions to user ───────────── */
-export const assignPermissions = asyncHandler(async (req, res) => {
-  const { permissions } = req.body;
-  if (!Array.isArray(permissions)) return sendError(res, 400, "permissions must be an array");
-
-  const invalid = validatePermissions(permissions);
-  if (invalid.length) return sendError(res, 400, `Invalid permissions: ${invalid.join(", ")}`);
-
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { permissions },
-    { new: true, runValidators: true }
-  )
-    .select("-passwordHash")
-    .populate("roleId", "name permissions");
-
-  if (!user) return sendError(res, 404, "User not found");
-
-  await logActivity(req.user._id, "ASSIGN_PERMISSIONS", "User", user._id);
-  return sendSuccess(res, 200, "Permissions updated", {
-    permissions: user.permissions,
-    effectivePermissions: user.getEffectivePermissions(),
-  });
-});
-
-/* ── Assign role to user (by roleId ObjectId) ─────── */
-export const assignRole = asyncHandler(async (req, res) => {
-  const { roleId } = req.body;
-
-  if (!roleId) return sendError(res, 400, "roleId is required");
-
-  const role = await Role.findById(roleId);
-  if (!role) return sendError(res, 400, "Role not found");
-
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { roleId },
-    { new: true, runValidators: true }
-  )
-    .select("-passwordHash")
-    .populate("roleId", "name permissions");
-
-  if (!user) return sendError(res, 404, "User not found");
-
-  await logActivity(req.user._id, "ASSIGN_ROLE", "User", user._id, { roleId, roleName: role.name });
-  return sendSuccess(res, 200, "Role assigned", {
-    roleId: user.roleId,
-    effectivePermissions: user.getEffectivePermissions(),
-  });
-});
-
-/* ── Remove role from user ────────────────────────── */
-export const removeRole = asyncHandler(async (req, res) => {
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    { $unset: { roleId: "" } },
-    { new: true }
-  ).select("-passwordHash");
-
-  if (!user) return sendError(res, 404, "User not found");
-
-  await logActivity(req.user._id, "REMOVE_ROLE", "User", user._id);
-  return sendSuccess(res, 200, "Role removed from user");
 });
 
 /* ── Admin reset password ─────────────────────────── */
