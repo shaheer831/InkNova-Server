@@ -95,14 +95,24 @@ export const register = async (req, res) => {
     const { name, email, password, phone } = req.body;
     if (!name || !email || !password) return sendError(res, 400, "Name, email and password required");
     if (await User.findOne({ email: email.toLowerCase() })) return sendError(res, 409, "Email already registered");
+
+    // Find or create the customer role
+    let customerRole = await Role.findOne({ name: /^customer$/i });
+    if (!customerRole) {
+      customerRole = await Role.create({ name: "customer", permissions: [] });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email: email.toLowerCase(), passwordHash, permissions: [], phone });
+    const user = await User.create({ name, email: email.toLowerCase(), passwordHash, roleId: customerRole._id, permissions: [], phone });
+
     const accessToken = signAccess(user._id);
     const refreshToken = signRefresh(user._id);
     await User.findByIdAndUpdate(user._id, { refreshToken });
+
     // send welcome notification
     await Notification.create({ userId: user._id, type: "system", title: "Welcome to InkNest!", body: `Hi ${name}, thanks for joining us. Start exploring our coloring books!` });
-    sendSuccess(res, 201, { accessToken, refreshToken, user: { _id: user._id, name: user.name, email: user.email } });
+
+    sendSuccess(res, 201, { accessToken, refreshToken, user: { _id: user._id, name: user.name, email: user.email, roleId: user.roleId } });
   } catch (e) { sendError(res, 500, e.message); }
 };
 
