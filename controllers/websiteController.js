@@ -99,7 +99,7 @@ export const register = async (req, res) => {
     // Find or create the customer role
     let customerRole = await Role.findOne({ name: /^customer$/i });
     if (!customerRole) {
-      customerRole = await Role.create({ name: "customer", permissions: [] });
+      customerRole = await Role.create({ name: "Customer", permissions: [] });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
