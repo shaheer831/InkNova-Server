@@ -97,7 +97,7 @@ export const register = async (req, res) => {
     if (await User.findOne({ email: email.toLowerCase() })) return sendError(res, 409, "Email already registered");
 
     // Find or create the customer role
-    let customerRole = await Role.findOne({ name: /^customer$/i });
+    let customerRole = await Role.findOne({ name: /^Customer$/i });
     if (!customerRole) {
       customerRole = await Role.create({ name: "Customer", permissions: [] });
     }
