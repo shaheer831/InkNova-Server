@@ -194,14 +194,24 @@ export const listUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip, sortBy, order } = parsePagination(req.query);
   const { roleId, isActive, search, dateFrom, dateTo } = req.query;
 
+  // Resolve the customer role ID so we can exclude those users
+  const customerRole = await Role.findOne({ name: /^customer$/i }).select("_id");
+
   const eqFilter = fieldFilter({ roleId, isActive }, ["roleId", "isActive"]);
   const searchFilter = keywordFilter(search, ["name", "email"]);
   const dateFilter = dateRangeFilter(dateFrom, dateTo);
 
+  // Exclude customers unless the caller is explicitly filtering by that roleId
+  const excludeCustomerFilter =
+    customerRole && (!roleId || roleId !== customerRole._id.toString())
+      ? { roleId: { $ne: customerRole._id } }
+      : null;
+
   const filter = mergeFilters(
     eqFilter,
     searchFilter,
-    dateFilter ? { createdAt: dateFilter } : null
+    dateFilter ? { createdAt: dateFilter } : null,
+    excludeCustomerFilter
   );
 
   const { data, meta } = await paginateQuery(User, filter, {
@@ -227,10 +237,15 @@ export const listUsers = asyncHandler(async (req, res) => {
 
 /* ── List all users (no pagination — for dropdowns) ── */
 export const listUsersAll = asyncHandler(async (req, res) => {
-  const users = await User.find()
+  // Exclude users with the customer role
+  const customerRole = await Role.findOne({ name: /^customer$/i }).select("_id");
+  const excludeCustomerFilter = customerRole ? { roleId: { $ne: customerRole._id } } : {};
+
+  const users = await User.find(excludeCustomerFilter)
     .select("_id name email isActive roleId")
     .populate("roleId", "name")
     .sort({ name: 1 });
+
   return sendSuccess(res, 200, "All users retrieved", users);
 });
 

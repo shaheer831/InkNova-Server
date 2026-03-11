@@ -38,13 +38,21 @@ export const register = asyncHandler(async (req, res) => {
     parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12
   );
 
-  // New public registrations have no role and no permissions by default
+  // Find or create the customer role
+  let customerRole = await Role.findOne({ name: /^customer$/i });
+  if (!customerRole) {
+    customerRole = await Role.create({ name: "customer", permissions: [] });
+  }
+
   const user = await User.create({
     name,
     email: email.toLowerCase(),
     passwordHash,
+    roleId: customerRole._id,
     permissions: [],
   });
+
+  const populated = await user.populate("roleId", "name permissions");
 
   const accessToken = generateAccessToken(user._id);
   const refreshToken = await generateRefreshToken(user._id);
@@ -53,16 +61,15 @@ export const register = asyncHandler(async (req, res) => {
     accessToken,
     refreshToken,
     user: {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      roleId: null,
-      permissions: [],
-      effectivePermissions: [],
+      _id: populated._id,
+      name: populated.name,
+      email: populated.email,
+      roleId: populated.roleId,
+      permissions: populated.permissions,
+      effectivePermissions: populated.getEffectivePermissions(),
     },
   });
 });
-
 /* ── POST /api/auth/login ─────────────────────────── */
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
