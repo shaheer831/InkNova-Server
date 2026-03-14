@@ -1,6 +1,7 @@
 /**
  * server.js
- * Express app bootstrap — v2 (COD only, no artwork/collections/payments).
+ * InkNova — Digital Book Reading Platform
+ * Express app bootstrap
  */
 import "dotenv/config";
 import express from "express";
@@ -15,30 +16,29 @@ import { VALID_PERMISSIONS } from "./config/permissions.js";
 import logger from "./utils/logger.js";
 import errorHandler from "./middlewares/errorHandler.js";
 
-// ── Route imports ─────────────────────────────────
+// ── Admin routes ──────────────────────────────────
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import customerRoutes from "./routes/customerRoutes.js";
 import bookRoutes from "./routes/bookRoutes.js";
-import categoryRoutes from "./routes/categoryRoutes.js";
-import orderRoutes from "./routes/orderRoutes.js";
-import inventoryRoutes from "./routes/inventoryRoutes.js";
-import productionRoutes from "./routes/productionRoutes.js";
-import vendorRoutes from "./routes/vendorRoutes.js";
-import materialRoutes from "./routes/materialRoutes.js";
-import discountRoutes from "./routes/discountRoutes.js";
+import chapterRoutes from "./routes/chapterRoutes.js";
+import seriesRoutes from "./routes/seriesRoutes.js";
+import genreRoutes from "./routes/genreRoutes.js";
 import roleRoutes from "./routes/roleRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
-import websiteRoutes from "./routes/websiteRoutes.js";
+import reviewAdminRoutes from "./routes/reviewRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import reviewRoutes from "./routes/reviewRoutes.js";
+import discountRoutes from "./routes/discountRoutes.js";
+
+// ── Client (reader) routes ────────────────────────
+import readerRoutes from "./routes/readerRoutes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── App init ──────────────────────────────────────
 const app = express();
 
-// ── Security & utility middleware ─────────────────
+// ── Middleware ─────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.options("*", cors());
@@ -51,45 +51,54 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 if (process.env.NODE_ENV !== "test") {
-  app.use(morgan("combined", {
-    stream: { write: (msg) => logger.info(msg.trim()) },
-  }));
+  app.use(
+    morgan("combined", {
+      stream: { write: (msg) => logger.info(msg.trim()) },
+    }),
+  );
 }
 
-// ── Health check ──────────────────────────────────
+// ── Health ─────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    platform: "InkNova Reading Platform",
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// ── API routes ────────────────────────────────────
+// ── Admin API routes ───────────────────────────────
 const API = "/api";
-
 app.use(`${API}/auth`, authRoutes);
 app.use(`${API}/users`, userRoutes);
+app.use(`${API}/customers`, customerRoutes);
 app.use(`${API}/books`, bookRoutes);
-app.use(`${API}/categories`, categoryRoutes);
-app.use(`${API}/orders`, orderRoutes);
-app.use(`${API}/inventory`, inventoryRoutes);
-app.use(`${API}/production`, productionRoutes);
-app.use(`${API}/vendors`, vendorRoutes);
-app.use(`${API}/materials`, materialRoutes);
-app.use(`${API}/discounts`, discountRoutes);
+app.use(`${API}/books/:bookId/chapters`, chapterRoutes); // nested: /api/books/:bookId/chapters
+app.use(`${API}/chapters`, chapterRoutes);               // flat: /api/chapters/:id  (bookId in body/query)
+app.use(`${API}/series`, seriesRoutes);
+app.use(`${API}/genres`, genreRoutes);
 app.use(`${API}/roles`, roleRoutes);
 app.use(`${API}/activity`, activityRoutes);
 app.use(`${API}/dashboard`, dashboardRoutes);
-app.use(`${API}/website`, websiteRoutes);
+app.use(`${API}/reviews`, reviewAdminRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
-app.use(`${API}/reviews`, reviewRoutes);
+app.use(`${API}/discounts`, discountRoutes);
 
-// ── 404 handler ───────────────────────────────────
+// ── Client (reader) routes ─────────────────────────
+app.use(`${API}/reader`, readerRoutes);
+
+// ── 404 ────────────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: `Route ${req.method} ${req.path} not found` });
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.path} not found`,
+  });
 });
 
-// ── Global error handler ──────────────────────────
+// ── Error handler ──────────────────────────────────
 app.use(errorHandler);
 
-// ── Start ─────────────────────────────────────────
+// ── Start ──────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 5000;
 
 const start = async () => {

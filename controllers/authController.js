@@ -8,7 +8,7 @@
  *  - Register creates user with no role by default
  */
 import bcrypt from "bcrypt";
-import { User } from "../models/index.js";
+import { User, Role } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { asyncHandler, validatePassword } from "../utils/helpers.js";
 import {
@@ -21,7 +21,7 @@ import { handleFailedLogin, handleSuccessfulLogin } from "../middlewares/loginPr
 
 /* ── POST /api/auth/register ──────────────────────── */
 export const register = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, roleId } = req.body;
 
   if (!name || !email || !password) {
     return sendError(res, 400, "Name, email, and password are required");
@@ -38,17 +38,19 @@ export const register = asyncHandler(async (req, res) => {
     parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12
   );
 
-  // Find or create the customer role
-  let customerRole = await Role.findOne({ name: /^customer$/i });
-  if (!customerRole) {
-    customerRole = await Role.create({ name: "customer", permissions: [] });
+  // Validate roleId if provided
+  let resolvedRoleId = null;
+  if (roleId) {
+    const roleDoc = await Role.findById(roleId);
+    if (!roleDoc) return sendError(res, 400, "Invalid roleId — role not found");
+    resolvedRoleId = roleDoc._id;
   }
 
   const user = await User.create({
     name,
     email: email.toLowerCase(),
     passwordHash,
-    roleId: customerRole._id,
+    roleId: resolvedRoleId,
     permissions: [],
   });
 

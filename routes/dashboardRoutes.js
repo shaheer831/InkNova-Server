@@ -1,22 +1,11 @@
-
-/**
- * routes/dashboardRoutes.js
- */
 import { Router } from "express";
-import {
-  getStats, getSalesOverview, getInventoryAlerts,
-  getRevenueSummary, getRecentActivity,
-} from "../controllers/dashboardController.js";
+import { getDashboardStats, getReadingAnalytics, getBookAnalytics } from "../controllers/dashboardController.js";
 import { verifyToken, requirePermission } from "../middlewares/auth.js";
 
 const router = Router();
 
-router.use(verifyToken);
-
-router.get("/stats", requirePermission("view-dashboard"), getStats);
-router.get("/sales", requirePermission("view-reports"), getSalesOverview);
-router.get("/inventory-alerts", requirePermission("view-inventory"), getInventoryAlerts);
-router.get("/revenue", requirePermission("view-reports"), getRevenueSummary);
-router.get("/activity", requirePermission("view-logs"), getRecentActivity);
+router.get("/", verifyToken, requirePermission("view-dashboard"), getDashboardStats);
+router.get("/reading-analytics", verifyToken, requirePermission("view-reports"), getReadingAnalytics);
+router.get("/books/:id/analytics", verifyToken, requirePermission("view-reports"), getBookAnalytics);
 
 export default router;

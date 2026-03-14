@@ -1,52 +1,53 @@
 /**
- * reviewRoutes.js
- * Admin routes for review management.
- * Mount at: /api/reviews
+ * routes/reviewRoutes.js
+ * Admin review moderation routes
  */
-import express from "express";
-import { verifyToken as authenticate, requirePermission as authorize } from "../middlewares/auth.js";
-import mongoose from "mongoose";
+import { Router } from "express";
+import { Review, Book } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { asyncHandler } from "../utils/helpers.js";
+import { verifyToken, requirePermission } from "../middlewares/auth.js";
+import { parsePagination, paginateQuery } from "../utils/paginate.js";
 
-const r = express.Router();
-const { Schema, model, models } = mongoose;
+const router = Router();
 
-const reviewSchema = new Schema({
-  bookId:   { type: Schema.Types.ObjectId, ref: "Book", required: true },
-  userId:   { type: Schema.Types.ObjectId, ref: "User", required: true },
-  rating:   { type: Number, min: 1, max: 5, required: true },
-  title:    String,
-  body:     String,
-  verified: { type: Boolean, default: false },
-}, { timestamps: true });
-const Review = models.Review || model("Review", reviewSchema);
+// List all reviews (admin)
+router.get("/", verifyToken, requirePermission("view-reviews"), asyncHandler(async (req, res) => {
+  const { page, limit, skip, sortBy, order } = parsePagination(req.query);
+  const { status, bookId } = req.query;
+  const filter = {};
+  if (status) filter.status = status;
+  if (bookId) filter.bookId = bookId;
+  const { data, meta } = await paginateQuery(Review, filter, {
+    page, limit, skip, sortBy, order,
+    populate: [{ path: "userId", select: "name email picture" }, { path: "bookId", select: "title slug" }],
+  });
+  return sendSuccess(res, 200, "Reviews", data, meta);
+}));
 
-// GET /api/reviews — all reviews (admin)
-r.get("/", authenticate, async (req, res) => {
-  try {
-    const { page = 1, limit = 15, rating, bookId } = req.query;
-    const filter = {};
-    if (rating) filter.rating = Number(rating);
-    if (bookId) filter.bookId = bookId;
-    const skip = (Number(page) - 1) * Number(limit);
-    const [reviews, total] = await Promise.all([
-      Review.find(filter)
-        .populate("bookId", "title coverImage")
-        .populate("userId", "name email picture")
-        .sort({ createdAt: -1 })
-        .skip(skip).limit(Number(limit)),
-      Review.countDocuments(filter)
-    ]);
-    sendSuccess(res, 200, { reviews, total });
-  } catch (e) { sendError(res, 500, e.message); }
-});
+// Approve / reject review
+router.patch("/:id/status", verifyToken, requirePermission("moderate-reviews"), asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  if (!["approved", "rejected", "pending"].includes(status)) return sendError(res, 400, "Invalid status");
+  const review = await Review.findByIdAndUpdate(req.params.id, { status }, { new: true });
+  if (!review) return sendError(res, 404, "Review not found");
+  // Recalculate book rating after moderation
+  const agg = await Review.aggregate([
+    { $match: { bookId: review.bookId, status: "approved" } },
+    { $group: { _id: null, avg: { $avg: "$rating" }, count: { $sum: 1 } } },
+  ]);
+  await Book.findByIdAndUpdate(review.bookId, {
+    averageRating: agg[0] ? Math.round(agg[0].avg * 10) / 10 : 0,
+    reviewCount: agg[0] ? agg[0].count : 0,
+  });
+  return sendSuccess(res, 200, "Review status updated", review);
+}));
 
-// DELETE /api/reviews/:id — admin delete any review
-r.delete("/:id", authenticate, async (req, res) => {
-  try {
-    await Review.findByIdAndDelete(req.params.id);
-    sendSuccess(res, 200, null, "Review deleted");
-  } catch (e) { sendError(res, 500, e.message); }
-});
+// Delete review (admin)
+router.delete("/:id", verifyToken, requirePermission("delete-reviews"), asyncHandler(async (req, res) => {
+  const review = await Review.findByIdAndDelete(req.params.id);
+  if (!review) return sendError(res, 404, "Review not found");
+  return sendSuccess(res, 200, "Review deleted");
+}));
 
-export default r;
+export default router;

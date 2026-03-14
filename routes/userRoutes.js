@@ -8,7 +8,7 @@ import {
   assignPermissions, assignRole, removeRole, resetPassword, getUserActivity,
 } from "../controllers/userController.js";
 import { verifyToken, requireSuperAdmin, requirePermission } from "../middlewares/auth.js";
-import { image } from "../middlewares/upload.js";
+import { avatarUpload } from "../middlewares/upload.js";
 
 const router = Router();
 
@@ -16,11 +16,11 @@ router.use(verifyToken);
 
 router.get("/all", requirePermission("view-users"), listUsersAll);
 router.get("/", requirePermission("view-users"), listUsers);
-router.post("/", requirePermission("add-users"), image, createUser);
+router.post("/", requirePermission("add-users"), avatarUpload, createUser);
 router.delete("/bulk", requirePermission("delete-users"), bulkDeleteUsers);
 
 router.get("/:id", getUserById);
-router.put("/:id", image, updateUser);
+router.put("/:id", avatarUpload, updateUser);
 router.delete("/:id", requirePermission("delete-users"), deleteUser);
 
 router.post("/:id/change-password", changePassword);

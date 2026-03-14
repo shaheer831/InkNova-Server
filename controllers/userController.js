@@ -19,10 +19,10 @@ import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
 import { validatePermissions } from "../config/permissions.js";
 import { isSuperAdmin } from "../middlewares/auth.js";
+import { useCloudinary } from "../middlewares/upload.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
-const isProduction = process.env.NODE_ENV === "production";
 
 const isOwnerOrSuperAdmin = (req, paramId) =>
   isSuperAdmin(req.user) ||
@@ -37,7 +37,7 @@ const isOwnerOrSuperAdmin = (req, paramId) =>
 const buildPictureData = async (file) => {
   if (!file) return null;
 
-  if (isProduction) {
+  if (useCloudinary) {
     const { url, publicId } = await uploadToCloudinary(file.buffer, {
       folder: "inknova/avatars",
       mimetype: file.mimetype,
