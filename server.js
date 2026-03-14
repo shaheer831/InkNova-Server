@@ -39,7 +39,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 // ── Middleware ─────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.options("*", cors());
 app.use(express.json({ limit: "10mb" }));
