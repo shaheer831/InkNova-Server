@@ -90,10 +90,6 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// Static file serving — only useful in development (Vercel has no persistent disk)
-if (process.env.NODE_ENV !== "production") {
-  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-}
 
 if (process.env.NODE_ENV !== "test") {
   app.use(
