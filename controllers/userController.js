@@ -19,7 +19,6 @@ import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
 import { validatePermissions } from "../config/permissions.js";
 import { isSuperAdmin } from "../middlewares/auth.js";
-import { useCloudinary } from "../middlewares/upload.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 const SALT = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
@@ -29,27 +28,14 @@ const isOwnerOrSuperAdmin = (req, paramId) =>
   req.user._id.toString() === paramId.toString() ||
   req.user.hasPermission("view-users");
 
-/**
- * Build picture object from uploaded file.
- * In production: uploads buffer to Cloudinary and returns the CDN url.
- * In development: returns local disk path.
- */
+/* Upload avatar buffer to Cloudinary */
 const buildPictureData = async (file) => {
   if (!file) return null;
-
-  if (useCloudinary) {
-    const { url, publicId } = await uploadToCloudinary(file.buffer, {
-      folder: "inknova/avatars",
-      mimetype: file.mimetype,
-    });
-    return { url, publicId, originalName: file.originalname, size: file.size };
-  }
-
-  return {
-    url: `/uploads/avatars/${file.filename}`,
-    originalName: file.originalname,
-    size: file.size,
-  };
+  const { url, publicId } = await uploadToCloudinary(file.buffer, {
+    folder: "inknova/avatars",
+    mimetype: file.mimetype,
+  });
+  return { url, publicId, originalName: file.originalname, size: file.size };
 };
 
 /* ── Create user ──────────────────────────────────── */

@@ -695,22 +695,12 @@ export const getReadingStats = asyncHandler(async (req, res) => {
 export const updateAvatar = asyncHandler(async (req, res) => {
   if (!req.file) return sendError(res, 400, "No image file provided");
 
-  const { useCloudinary } = await import("../middlewares/upload.js");
-  let picture;
-
-  if (useCloudinary) {
-    const { uploadToCloudinary } = await import("../utils/cloudinary.js");
-    const { url, publicId } = await uploadToCloudinary(req.file.buffer, {
-      folder: "inknova/avatars",
-      mimetype: req.file.mimetype,
-    });
-    picture = { url, publicId, originalName: req.file.originalname };
-  } else {
-    picture = {
-      url: `/uploads/avatars/${req.file.filename}`,
-      originalName: req.file.originalname,
-    };
-  }
+  const { uploadToCloudinary } = await import("../utils/cloudinary.js");
+  const { url, publicId } = await uploadToCloudinary(req.file.buffer, {
+    folder: "inknova/avatars",
+    mimetype: req.file.mimetype,
+  });
+  const picture = { url, publicId, originalName: req.file.originalname };
 
   const updated = await User.findByIdAndUpdate(
     req.user._id,

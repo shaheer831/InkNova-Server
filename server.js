@@ -1,7 +1,7 @@
 /**
  * server.js
  * InkNova — Digital Book Reading Platform
- * Express app bootstrap
+ * Express app bootstrap — Vercel-compatible (serverless)
  */
 import "dotenv/config";
 import express from "express";
@@ -32,17 +32,27 @@ import readerRoutes from "./routes/readerRoutes.js";
 
 const app = express();
 
+// ── CORS — allow all origins, all methods (no restrictions) ──────────
+const corsOptions = {
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["*"],
+  exposedHeaders: ["*"],
+  credentials: false,
+};
+app.use(cors(corsOptions));
+app.options("*", (req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+  });
+  res.sendStatus(204);
+});
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use(cors({
-  origin: "*",
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"]
-}));
-
-app.options("*", cors());
 
 // ── Admin API routes ───────────────────────────────
 const API = "/api";
@@ -75,16 +85,27 @@ app.use((req, res) => {
 // ── Error handler ──────────────────────────────────
 app.use(errorHandler);
 
-// ── Start ──────────────────────────────────────────
-const PORT = parseInt(process.env.PORT) || 5000;
+// ── DB connection (cached for serverless warm reuse) ──────────────────
+let dbConnected = false;
+const ensureDB = async () => {
+  if (!dbConnected) {
+    await connectDB();
+    logger.info(`Loaded ${VALID_PERMISSIONS.length} permissions`);
+    dbConnected = true;
+  }
+};
 
-const start = async () => {
-  await connectDB();
-  logger.info(`Loaded ${VALID_PERMISSIONS.length} permissions: ${VALID_PERMISSIONS.join(", ")}`);
+// ── Local dev: start server normally ──────────────────────────────────
+// On Vercel this block is skipped; the exported `app` is used directly.
+if (process.env.NODE_ENV !== "production" || process.env.FORCE_SERVER) {
+  const PORT = parseInt(process.env.PORT) || 5000;
+  await ensureDB();
   app.listen(PORT, () => {
     logger.info(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV || "development"}]`);
   });
-};
+} else {
+  // Vercel: connect DB once on cold start
+  await ensureDB();
+}
 
-start();
 export default app;

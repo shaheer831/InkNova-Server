@@ -7,11 +7,9 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import { asyncHandler, logActivity, slugify } from "../utils/helpers.js";
 import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, dateRangeFilter, mergeFilters } from "../utils/filters.js";
-import { useCloudinary } from "../middlewares/upload.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 
-
-/* Upload book images (cover, banner, showcase) */
+/* Upload book images (cover, banner, showcase) to Cloudinary */
 const uploadBookImages = async (files = {}) => {
   const result = {};
   if (files.coverImage?.[0]) {
@@ -35,33 +33,13 @@ const uploadBookImages = async (files = {}) => {
   return result;
 };
 
-/* Dev: parse disk files */
-const parseBookFiles = (files = {}) => {
-  const result = {};
-  if (files.coverImage?.[0]) {
-    const f = files.coverImage[0];
-    result.coverImage = { url: `/uploads/covers/${f.filename}`, originalName: f.originalname };
-  }
-  if (files.bannerImage?.[0]) {
-    const f = files.bannerImage[0];
-    result.bannerImage = { url: `/uploads/banners/${f.filename}` };
-  }
-  if (files.showcaseImages?.length) {
-    result.showcaseImages = files.showcaseImages.map((f) => ({ url: `/uploads/showcase/${f.filename}`, originalName: f.originalname }));
-  }
-  return result;
-};
-
 /* CREATE */
 export const createBook = asyncHandler(async (req, res) => {
   const { title, description, synopsis, authorName, authorBio, genres, tags, language, ageRating, seriesId, volumeNumber, isFeatured, isFree, status } = req.body;
   if (!title) return sendError(res, 400, "Title is required");
   if (!authorName) return sendError(res, 400, "Author name is required");
 
-  const fileData = useCloudinary
-    ? await uploadBookImages(req.files || {})
-    : parseBookFiles(req.files || {});
-
+  const fileData = await uploadBookImages(req.files || {});
   const slug = slugify(title) + "-" + Date.now();
 
   const book = await Book.create({
@@ -79,9 +57,7 @@ export const createBook = asyncHandler(async (req, res) => {
     ...fileData,
   });
 
-  // Update series volume count
   if (seriesId) await Series.findByIdAndUpdate(seriesId, { $inc: { totalVolumes: 1 } });
-  // Update genre book counts
   if (book.genres?.length) await Genre.updateMany({ _id: { $in: book.genres } }, { $inc: { bookCount: 1 } });
 
   await logActivity(req.user._id, "CREATE", "Book", book._id);
@@ -102,9 +78,7 @@ export const updateBook = asyncHandler(async (req, res) => {
   const book = await Book.findById(req.params.id);
   if (!book) return sendError(res, 404, "Book not found");
 
-  const fileData = useCloudinary
-    ? await uploadBookImages(req.files || {})
-    : parseBookFiles(req.files || {});
+  const fileData = await uploadBookImages(req.files || {});
 
   const { title, description, synopsis, authorName, authorBio, genres, tags, language, ageRating, seriesId, volumeNumber, isFeatured, isFree, status } = req.body;
 
@@ -139,7 +113,6 @@ export const updateBook = asyncHandler(async (req, res) => {
 export const deleteBook = asyncHandler(async (req, res) => {
   const book = await Book.findByIdAndDelete(req.params.id);
   if (!book) return sendError(res, 404, "Book not found");
-  // Remove all chapters
   await Chapter.deleteMany({ bookId: req.params.id });
   if (book.seriesId) await Series.findByIdAndUpdate(book.seriesId, { $inc: { totalVolumes: -1 } });
   if (book.genres?.length) await Genre.updateMany({ _id: { $in: book.genres } }, { $inc: { bookCount: -1 } });

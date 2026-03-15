@@ -1,15 +1,13 @@
 /**
  * controllers/genreController.js
- * Admin: Genre CRUD (replaces categoryController)
+ * Admin: Genre CRUD
  */
 import { Genre } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { asyncHandler, logActivity, slugify } from "../utils/helpers.js";
 import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { keywordFilter } from "../utils/filters.js";
-import { useCloudinary } from "../middlewares/upload.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
-
 
 export const createGenre = asyncHandler(async (req, res) => {
   const { name, description, icon, color, parentId } = req.body;
@@ -17,12 +15,8 @@ export const createGenre = asyncHandler(async (req, res) => {
 
   let coverImage = {};
   if (req.file) {
-    if (useCloudinary) {
-      const { url, publicId } = await uploadToCloudinary(req.file.buffer, { folder: "inknova/genres", mimetype: req.file.mimetype });
-      coverImage = { url, publicId };
-    } else {
-      coverImage = { url: `/uploads/genres/${req.file.filename}` };
-    }
+    const { url, publicId } = await uploadToCloudinary(req.file.buffer, { folder: "inknova/genres", mimetype: req.file.mimetype });
+    coverImage = { url, publicId };
   }
 
   const slug = slugify(name) + "-" + Date.now();
@@ -43,12 +37,8 @@ export const updateGenre = asyncHandler(async (req, res) => {
 
   let coverImage = undefined;
   if (req.file) {
-    if (useCloudinary) {
-      const { url, publicId } = await uploadToCloudinary(req.file.buffer, { folder: "inknova/genres", mimetype: req.file.mimetype });
-      coverImage = { url, publicId };
-    } else {
-      coverImage = { url: `/uploads/genres/${req.file.filename}` };
-    }
+    const { url, publicId } = await uploadToCloudinary(req.file.buffer, { folder: "inknova/genres", mimetype: req.file.mimetype });
+    coverImage = { url, publicId };
   }
 
   const { name, description, icon, color, parentId, isActive } = req.body;
@@ -90,7 +80,6 @@ export const listGenres = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Genres retrieved", data, meta);
 });
 
-/* ALL (no pagination — for dropdowns) */
 export const listGenresAll = asyncHandler(async (req, res) => {
   const genres = await Genre.find({ isActive: true })
     .select("_id name slug icon color bookCount")
@@ -98,7 +87,6 @@ export const listGenresAll = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "All genres retrieved", genres);
 });
 
-/* TOGGLE ACTIVE */
 export const toggleGenreActive = asyncHandler(async (req, res) => {
   const genre = await Genre.findById(req.params.id);
   if (!genre) return sendError(res, 404, "Genre not found");
@@ -108,7 +96,6 @@ export const toggleGenreActive = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, `Genre ${genre.isActive ? "activated" : "deactivated"}`, { isActive: genre.isActive });
 });
 
-/* BULK DELETE */
 export const bulkDeleteGenres = asyncHandler(async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || !ids.length) return sendError(res, 400, "ids array required");

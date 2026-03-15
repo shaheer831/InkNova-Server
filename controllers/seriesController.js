@@ -7,9 +7,7 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import { asyncHandler, logActivity, slugify } from "../utils/helpers.js";
 import { parsePagination, paginateQuery } from "../utils/paginate.js";
 import { fieldFilter, keywordFilter, mergeFilters } from "../utils/filters.js";
-import { useCloudinary } from "../middlewares/upload.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
-
 
 const uploadSeriesImages = async (files = {}) => {
   const result = {};
@@ -26,19 +24,12 @@ const uploadSeriesImages = async (files = {}) => {
   return result;
 };
 
-const parseSeriesFiles = (files = {}) => {
-  const result = {};
-  if (files.coverImage?.[0]) result.coverImage = { url: `/uploads/covers/${files.coverImage[0].filename}` };
-  if (files.bannerImage?.[0]) result.bannerImage = { url: `/uploads/banners/${files.bannerImage[0].filename}` };
-  return result;
-};
-
 export const createSeries = asyncHandler(async (req, res) => {
   const { title, description, authorName, genres, tags, status } = req.body;
   if (!title) return sendError(res, 400, "Title is required");
   if (!authorName) return sendError(res, 400, "Author name is required");
 
-  const fileData = useCloudinary ? await uploadSeriesImages(req.files || {}) : parseSeriesFiles(req.files || {});
+  const fileData = await uploadSeriesImages(req.files || {});
   const slug = slugify(title) + "-" + Date.now();
 
   const series = await Series.create({
@@ -67,7 +58,7 @@ export const updateSeries = asyncHandler(async (req, res) => {
   const series = await Series.findById(req.params.id);
   if (!series) return sendError(res, 404, "Series not found");
 
-  const fileData = useCloudinary ? await uploadSeriesImages(req.files || {}) : parseSeriesFiles(req.files || {});
+  const fileData = await uploadSeriesImages(req.files || {});
   const { title, description, authorName, genres, tags, status, isPublished } = req.body;
 
   const updates = {
@@ -109,7 +100,6 @@ export const listSeries = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Series retrieved", data, meta);
 });
 
-/* ALL (no pagination — for dropdowns) */
 export const listSeriesAll = asyncHandler(async (req, res) => {
   const series = await Series.find()
     .select("_id title slug status isPublished totalVolumes authorName")
@@ -117,7 +107,6 @@ export const listSeriesAll = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "All series retrieved", series);
 });
 
-/* BULK DELETE */
 export const bulkDeleteSeries = asyncHandler(async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || !ids.length) return sendError(res, 400, "ids array required");
@@ -126,7 +115,6 @@ export const bulkDeleteSeries = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, `${result.deletedCount} series deleted`);
 });
 
-/* TOGGLE PUBLISHED */
 export const toggleSeriesPublished = asyncHandler(async (req, res) => {
   const series = await Series.findById(req.params.id);
   if (!series) return sendError(res, 404, "Series not found");
