@@ -28,22 +28,5 @@ const logger = winston.createLogger({
   ],
 });
 
-// In development only: write logs to files (production filesystem is read-only on Vercel)
-if (process.env.NODE_ENV !== "production") {
-  const logsDir = path.join(__dirname, "../logs");
-  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-
-  logger.add(
-    new winston.transports.File({
-      filename: path.join(__dirname, "../logs/error.log"),
-      level: "error",
-    })
-  );
-  logger.add(
-    new winston.transports.File({
-      filename: path.join(__dirname, "../logs/combined.log"),
-    })
-  );
-}
 
 export default logger;
