@@ -38,10 +38,57 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
+// ── CORS Configuration ────────────────────────────
+const allowedOrigins = [
+  'https://ink-nova-crm.vercel.app',
+  'https://ink-nova-website.vercel.app',
+  'http://localhost:3000', // For local development
+  'http://localhost:5173', // If using Vite
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      logger.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Important for cookies/JWT
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Authorization', 'Set-Cookie'],
+  optionsSuccessStatus: 200,
+  maxAge: 86400, // 24 hours for preflight cache
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+
+// Add Helmet for security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+}));
 
 // Static file serving — only useful in development (Vercel has no persistent disk)
 if (process.env.NODE_ENV !== "production") {
@@ -62,6 +109,10 @@ app.get("/health", (req, res) => {
     status: "ok",
     platform: "InkNova Reading Platform",
     timestamp: new Date().toISOString(),
+    cors: {
+      allowedOrigins: allowedOrigins,
+      credentials: true
+    }
   });
 });
 
@@ -104,6 +155,7 @@ const start = async () => {
   logger.info(`Loaded ${VALID_PERMISSIONS.length} permissions: ${VALID_PERMISSIONS.join(", ")}`);
   app.listen(PORT, () => {
     logger.info(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV || "development"}]`);
+    logger.info(`✅ CORS enabled for origins: ${allowedOrigins.join(', ')}`);
   });
 };
 
