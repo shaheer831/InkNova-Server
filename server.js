@@ -39,24 +39,17 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
 
-if (process.env.NODE_ENV !== "test") {
-  app.use(
-    morgan("combined", {
-      stream: { write: (msg) => logger.info(msg.trim()) },
-    }),
-  );
-}
+// Disable all CORS protection
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
-// ── Health ─────────────────────────────────────────
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    platform: "InkNova Reading Platform",
-    timestamp: new Date().toISOString(),
-  });
-});
+app.options("*", cors());
 
 // ── Admin API routes ───────────────────────────────
 const API = "/api";
