@@ -38,18 +38,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// ── Middleware ─────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: false }));
-const corsOptions = {
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: false,
-};
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-app.use(express.json({ limit: "10mb" }));
+// Middleware
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cors());
 
 // Static file serving — only useful in development (Vercel has no persistent disk)
 if (process.env.NODE_ENV !== "production") {
